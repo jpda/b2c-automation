@@ -1,0 +1,37 @@
+{
+    "$schema": "http://schemas.management.azure.com/deploymentTemplate?api-version=2014-04-01-preview",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "location": {
+            "type": "string",
+            "defaultValue": "United States"
+        },
+        "tenantId": {
+            "type": "string",
+            "defaultValue": "be6fd20b-92bf-4295-a5a8-bf47b667b177"
+        },
+        "name": {
+            "type": "string",
+            "defaultValue": "jpdaauto3.onmicrosoft.com"
+        }
+    },
+    "resources": [
+        {
+            "apiVersion": "2017-01-30",
+            "type": "Microsoft.AzureActiveDirectory/b2cDirectories",
+            "name": "[parameters('name')]",
+            "location": "[parameters('location')]",
+            "tags": {
+                "primaryResourceId": "/subscriptions/e7048bdb-835c-440f-9304-aa4171382839/resourcegroups/service-me-p-jpdab2c/providers/Microsoft.AzureActiveDirectory/b2cDirectories/jpdaauto3.onmicrosoft.com"
+
+            },
+            "sku": {
+                "name": "Standard",
+                "tier": "A0"
+            },
+            "properties": {
+                "tenantId": "[parameters('tenantId')]"
+            }
+        }
+    ]
+}
