@@ -1,6 +1,6 @@
 Param (
     [Parameter(Mandatory = $true)]
-    [string] $NewTenantName = "jpdab2c",
+    [string] $NewTenantName,
 
     [Parameter(ValueFromPipelineByPropertyName)]
     [string] $OrganizationName,
@@ -9,7 +9,7 @@ Param (
     [string] $FlowName = "susiv2",
 
     [Parameter(ParameterSetName = 'UiCustomization')]
-    [string] $ResourceGroupName = "service-me-p-jpdab2c",
+    [string] $ResourceGroupName,
     [Parameter(ParameterSetName = 'UiCustomization')]
     [string] $UiStoreName = $NewTenantName,
     [Parameter(ParameterSetName = 'UiCustomization')]
@@ -45,7 +45,9 @@ function Add-ApplicationRegistration {
         $token
     )
 
-    $payload = "{`"id`":`"`",`"applicationVersion`":1,`"applicationId`":`"`",`"applicationName`":`"$appName`",`"enableWebClient`":true,`"webClientAllowImplicitFlow`":true,`"replyUrls`":[`"$appReplyUrl`"],`"webClientAppKeys`":[],`"enableNativeClient`":false,`"identifierUris`":[],`"oAuth2Permissions`":[],`"replyUrlsData`":[{`"url`":`"$appReplyUrl`",`"type`":1}]}"
+    $payload = Get-Content .\api-templates\app-registration.json -Raw
+    $payload = $payload.Replace("`$appNAme", $appName).Replace("`$appReplyUrl", $appReplyUrl);
+
     return Invoke-AuthenticatedPost -endpoint "https://main.b2cadmin.ext.azure.com/api/ApplicationV2/PostNewApplication?tenantId=$tenantName" -payload $payload -token $token
 }
 
@@ -61,11 +63,12 @@ function Add-StandardSusiUserFlow {
 
     $content = ""
 
+    # todo: make this better - discovery in project tree, etc.
     if ($uiCustomization) {
         $content = Add-UiCustomizations -contentApiDefinition "api.signinandsignupwithpassword" -tenantName $tenantName -displayName "Sign up or Sign in" -originalPageUri "unified.cshtml" -customUiContentUrl $unifiedPageUrl
     }
 
-    $payload = Get-Content .\flow.json -Raw
+    $payload = Get-Content .\api-templates\flow.json -Raw
     $payload = $payload.Replace("`$flowName", $flowName).Replace("`$flowType", $flowType).Replace("`$contentDefinitions", $content);
     return Invoke-AuthenticatedPost -endpoint "https://main.b2cadmin.ext.azure.com/api/adminuserjourneys?tenantId=$tenantName.onmicrosoft.com" -payload $payload -token $token
 }
@@ -79,7 +82,7 @@ function Add-UiCustomizations {
         [string]$customUiContentUrl
     )
 
-    $payload = Get-Content .\contentDefinition.json -Raw
+    $payload = Get-Content .\api-templates\contentDefinitions.json -Raw
     $payload = $payload.Replace("`$contentApiDefinition", $contentApiDefinition).Replace("`$tenantName", $tenantName).Replace("`$DisplayName", $displayName).Replace("`$originalPageUri", $originalPageUri).Replace("`$customUiContentUrl", $customUiContentUrl);
     return $payload;
 } 
@@ -139,7 +142,7 @@ function Add-UiFilesToContainer {
 }
 
 function Add-AzureResourceLinkToB2C {
-    
+    # todo: this
 }
 
 function Invoke-AuthenticatedPost {
@@ -178,8 +181,8 @@ function Write-Details {
     Write-Host -ForegroundColor Green $flowId
     Write-Host Dev reply url: -NoNewline
     Write-Host -ForegroundColor Green $replyUrl
+    # todo: make sure this works on pscore
     $encodedUrl = [System.Web.HttpUtility]::UrlEncode($replyUrl)
-    # https://jpdaauto1.b2clogin.com/jpdaauto1.onmicrosoft.com/oauth2/v2.0/authorize?p=B2C_1_susiv2&client_id=5d3b890f-f12d-4f6f-8839-2e37f7534790&nonce=defaultNonce&redirect_uri=http%3A%2F%2Flocalhost%3A3000&scope=openid&response_type=id_token&prompt=login
     Write-Host -NoNewline Signin URL: "https://" 
     Write-Host -NoNewLine -ForegroundColor Green $NewTenantName
     Write-Host -NoNewLine ".b2clogin.com/" 
@@ -230,14 +233,14 @@ Write-Host "Creating tenant $NewTenantName.onmicrosoft.com...this may take a whi
 $newTenantId = Add-Tenant -orgName $OrganizationName -tenantName $NewTenantName -token $token
 
 # re-authenticate in the b2c tenant
-#$newTenantId = "9be8cfde-bf06-4852-9dc1-93f76d73ed6b";
 $b2cToken = Get-Token -resource "https://management.core.windows.net/" -tenant $newTenantId
 $addAppResponse = Add-ApplicationRegistration -appName $AppName -appReplyUrl $AppReplyUrl -tenantName $newTenantId -token $b2cToken
 
+# todo: add discovery of more pages, versions, etc for ui customization
 $unifiedPageUrl = "https://$UiStoreName.blob.core.windows.net/$UiStoreContainerName/unified.html"
 
 if ($PSCmdlet.ParameterSetName -eq "UiCustomization" -or $UiCustomization) {
-    # Link tenant to subscription too
+    # todo: link tenant to subscription - requires azure sub & resource group 
     $uiStore = Add-AzureBlobStorageAccount -rgName $ResourceGroupName -storageName $UiStoreName -tenantUrl "$NewTenantName.b2clogin.com" -subId $SubscriptionId -subTenantId $SubscriptionTenantId
     $container = Add-UiStoreContainer -containerName $UiStoreContainerName -ctx $uiStore.Context
     Add-UiFilesToContainer -localRootPath $(Resolve-Path -Path ui) -containerName $container.Name -ctx $uiStore.Context

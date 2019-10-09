@@ -1,0 +1,21 @@
+{
+    "id": "",
+    "applicationVersion": 1,
+    "applicationId": "",
+    "applicationName": "$appName",
+    "enableWebClient": true,
+    "webClientAllowImplicitFlow": true,
+    "replyUrls": [
+        "$appReplyUrl"
+    ],
+    "webClientAppKeys": [],
+    "enableNativeClient": false,
+    "identifierUris": [],
+    "oAuth2Permissions": [],
+    "replyUrlsData": [
+        {
+            "url": "$appReplyUrl",
+            "type": 1
+        }
+    ]
+}
