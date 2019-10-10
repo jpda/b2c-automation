@@ -18,6 +18,8 @@ Param (
     [string] $SubscriptionId,
     [Parameter(ParameterSetName = 'UiCustomization')]
     [string] $SubscriptionTenantId,
+    [Parameter(ParameterSetName = 'UiCustomization')]
+    [string] $LocationOverride = "eastus",
     [switch] $UiCustomization = $FALSE
 )
 
@@ -46,7 +48,7 @@ function Add-ApplicationRegistration {
     )
 
     $payload = Get-Content .\api-templates\app-registration.json -Raw
-    $payload = $payload.Replace("`$appNAme", $appName).Replace("`$appReplyUrl", $appReplyUrl);
+    $payload = $payload.Replace("`$appName", $appName).Replace("`$appReplyUrl", $appReplyUrl);
 
     return Invoke-AuthenticatedPost -endpoint "https://main.b2cadmin.ext.azure.com/api/ApplicationV2/PostNewApplication?tenantId=$tenantName" -payload $payload -token $token
 }
@@ -57,20 +59,47 @@ function Add-StandardSusiUserFlow {
         [string]$flowName,
         [string]$flowType = "B2CSignUpOrSignInWithPassword_V2",
         [switch]$uiCustomization,
-        [string]$unifiedPageUrl,
+        [string]$customUiPageRootUrl,
+        [string]$rootCustomizationPath = ".\ui",
         $token
     )
 
-    $content = ""
+    $content = [System.String]::Empty;
 
-    # todo: make this better - discovery in project tree, etc.
     if ($uiCustomization) {
-        $content = Add-UiCustomizations -contentApiDefinition "api.signinandsignupwithpassword" -tenantName $tenantName -displayName "Sign up or Sign in" -originalPageUri "unified.cshtml" -customUiContentUrl $unifiedPageUrl
+        $contentTemplate = Get-Content .\api-templates\contentDefinitions.json -Raw
+        $contentData = Find-MatchingUiFiles -rootPath $rootCustomizationPath -tenantName $tenantName -customUiPageRootUrl $customUiPageRootUrl
+        $content = $contentTemplate.Replace("`$contentDefinitions", $contentData);
     }
 
     $payload = Get-Content .\api-templates\flow.json -Raw
     $payload = $payload.Replace("`$flowName", $flowName).Replace("`$flowType", $flowType).Replace("`$contentDefinitions", $content);
     return Invoke-AuthenticatedPost -endpoint "https://main.b2cadmin.ext.azure.com/api/adminuserjourneys?tenantId=$tenantName.onmicrosoft.com" -payload $payload -token $token
+}
+
+function Find-MatchingUiFiles {
+    param(
+        [string] $rootPath,
+        [string] $tenantName,
+        [string] $customUiPageRootUrl
+    )
+   
+    $pages = [System.Collections.Generic.Dictionary[string, string]]::new()
+    $pages.Add("phonefactor.html", "api.phonefactor");
+    $pages.Add("resetpassword.html", "api.localaccountpasswordreset");
+    $pages.Add("selfAsserted.html", "api.selfasserted.blockminor");
+    $pages.Add("unified.html", "api.signinandsignupwithpassword");
+    $pages.Add("updateprofile.html", "api.selfasserted.profileupdate");
+    $customizations = [System.Collections.Generic.List[string]]::new();
+
+    foreach ($page in $pages.GetEnumerator()) {
+        Write-Host $page $page.Key $page.Value
+        $p = Get-ChildItem -Path $rootPath -Recurse -Filter $page.Key
+        if ($NULL -eq $p) { continue };
+        $definition = Add-UiCustomizations -contentApiDefinition $page.Value -tenantName $tenantName -displayName $page.Value -originalPageUri $page.Key.Replace(".html", ".cshtml") -customUiContentUrl ($customUiPageRootUrl + $p.Name)
+        $customizations.Add($definition)
+    }
+    return [System.String]::Join(',', $customizations);
 }
 
 function Add-UiCustomizations {
@@ -82,7 +111,7 @@ function Add-UiCustomizations {
         [string]$customUiContentUrl
     )
 
-    $payload = Get-Content .\api-templates\contentDefinitions.json -Raw
+    $payload = Get-Content .\api-templates\contentDefinition.json -Raw
     $payload = $payload.Replace("`$contentApiDefinition", $contentApiDefinition).Replace("`$tenantName", $tenantName).Replace("`$DisplayName", $displayName).Replace("`$originalPageUri", $originalPageUri).Replace("`$customUiContentUrl", $customUiContentUrl);
     return $payload;
 } 
@@ -102,8 +131,13 @@ function Add-AzureBlobStorageAccount {
     else {
         Select-AzSubscription -Subscription $subId -Tenant $subTenantId
     }
-     
-    $rg = Get-AzResourceGroup -Name $rgName
+
+    $rg = Get-AzResourceGroup -Name $rgName -ErrorAction SilentlyContinue -ErrorVariable rgNotExists
+    Write-Host $rgNotExists
+    if ($rgNotExists) {
+        $rg = New-AzResourceGroup -Name $rgName -Location $LocationOverride
+    }
+
     $location = $rg.Location
 
     $storage = Get-AzStorageAccount -ResourceGroupName $rgName -Name $storageName -ErrorAction SilentlyContinue
@@ -223,28 +257,28 @@ function Get-Token {
 }
 
 # authenticates as ibiza :/
-$token = Get-Token -resource "74658136-14ec-4630-ad9b-26e160ff0fc6" -ErrorAction Stop
-if ($NULL -eq $token.AccessToken -or $token.AccessToken -eq "") {
-    Write-Host "Token not available, try logging in with Connect-AzAccount"
-    return;
-}
+# $token = Get-Token -resource "74658136-14ec-4630-ad9b-26e160ff0fc6" -ErrorAction Stop
+# if ($NULL -eq $token.AccessToken -or $token.AccessToken -eq "") {
+#     Write-Host "Token not available, try logging in with Connect-AzAccount"
+#     return;
+# }
 
-Write-Host "Creating tenant $NewTenantName.onmicrosoft.com...this may take a while...zzz..."
-$newTenantId = Add-Tenant -orgName $OrganizationName -tenantName $NewTenantName -token $token
-
-# re-authenticate in the b2c tenant
+# Write-Host "Creating tenant $NewTenantName.onmicrosoft.com...this may take a while...zzz..."
+# $newTenantId = Add-Tenant -orgName $OrganizationName -tenantName $NewTenantName -token $token
+$newTenantId = "bf9c040f-12f0-46aa-86f4-0e2db9bf460d" #jpdauto10
+# # re-authenticate in the b2c tenant
 $b2cToken = Get-Token -resource "https://management.core.windows.net/" -tenant $newTenantId
 $addAppResponse = Add-ApplicationRegistration -appName $AppName -appReplyUrl $AppReplyUrl -tenantName $newTenantId -token $b2cToken
 
 # todo: add discovery of more pages, versions, etc for ui customization
-$unifiedPageUrl = "https://$UiStoreName.blob.core.windows.net/$UiStoreContainerName/unified.html"
+$customUiPageRootUrl = "https://$UiStoreName.blob.core.windows.net/$UiStoreContainerName/"
 
 if ($PSCmdlet.ParameterSetName -eq "UiCustomization" -or $UiCustomization) {
     # todo: link tenant to subscription - requires azure sub & resource group 
     $uiStore = Add-AzureBlobStorageAccount -rgName $ResourceGroupName -storageName $UiStoreName -tenantUrl "$NewTenantName.b2clogin.com" -subId $SubscriptionId -subTenantId $SubscriptionTenantId
     $container = Add-UiStoreContainer -containerName $UiStoreContainerName -ctx $uiStore.Context
     Add-UiFilesToContainer -localRootPath $(Resolve-Path -Path ui) -containerName $container.Name -ctx $uiStore.Context
-    $addFlowResponse = Add-StandardSusiUserFlow -tenantId $newTenantId -token $b2cToken -flowName $FlowName -unifiedPageUrl $unifiedPageUrl -tenantName $NewTenantName -uiCustomization
+    $addFlowResponse = Add-StandardSusiUserFlow -tenantId $newTenantId -token $b2cToken -flowName $FlowName -customUiPageRootUrl $customUiPageRootUrl -tenantName $NewTenantName -uiCustomization
 }
 else {
     $addFlowResponse = Add-StandardSusiUserFlow -tenantId $newTenantId -token $b2cToken -flowName $FlowName -tenantName $NewTenantName

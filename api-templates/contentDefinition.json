@@ -1,0 +1,16 @@
+{
+    "id": "$contentApiDefinition",
+    "customUx": true,
+    "enabledForUserJourney": true,
+    "originalLoadUri": "https://$tenantName.b2clogin.com/static/tenant/default/$originalPageUri",
+    "loadUri": "$customUiContentUrl",
+    "packageVersion": "1.0.0",
+    "displayName": "$DisplayName",
+    "metadata": [
+        {
+            "key": "DisplayName",
+            "value": "$DisplayName"
+        }
+    ],
+    "localizedResourcesReferences": []
+}
