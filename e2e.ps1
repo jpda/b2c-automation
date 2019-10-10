@@ -93,10 +93,6 @@ function Find-MatchingUiFiles {
     $customizations = [System.Collections.Generic.List[string]]::new();
 
     foreach ($page in $pages.GetEnumerator()) {
-<<<<<<< HEAD
-=======
-        Write-Host $page $page.Key $page.Value
->>>>>>> 300f8b397081a336da0ffe5573c5a2ef5061c559
         $p = Get-ChildItem -Path $rootPath -Recurse -Filter $page.Key
         if ($NULL -eq $p) { continue };
         $definition = Add-UiCustomizations -contentApiDefinition $page.Value -tenantName $tenantName -displayName $page.Value -originalPageUri $page.Key.Replace(".html", ".cshtml") -customUiContentUrl ($customUiPageRootUrl + $p.Name)
