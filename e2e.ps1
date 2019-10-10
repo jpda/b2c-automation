@@ -93,6 +93,10 @@ function Find-MatchingUiFiles {
     $customizations = [System.Collections.Generic.List[string]]::new();
 
     foreach ($page in $pages.GetEnumerator()) {
+<<<<<<< HEAD
+=======
+        Write-Host $page $page.Key $page.Value
+>>>>>>> 300f8b397081a336da0ffe5573c5a2ef5061c559
         $p = Get-ChildItem -Path $rootPath -Recurse -Filter $page.Key
         if ($NULL -eq $p) { continue };
         $definition = Add-UiCustomizations -contentApiDefinition $page.Value -tenantName $tenantName -displayName $page.Value -originalPageUri $page.Key.Replace(".html", ".cshtml") -customUiContentUrl ($customUiPageRootUrl + $p.Name)
@@ -255,6 +259,7 @@ function Get-Token {
 }
 
 # authenticates as ibiza :/
+<<<<<<< HEAD
 $token = Get-Token -resource "74658136-14ec-4630-ad9b-26e160ff0fc6" -ErrorAction Stop
 if ($NULL -eq $token.AccessToken -or $token.AccessToken -eq "") {
     Write-Host "Token not available, try logging in with Connect-AzAccount"
@@ -264,6 +269,18 @@ if ($NULL -eq $token.AccessToken -or $token.AccessToken -eq "") {
 Write-Host "Creating tenant $NewTenantName.onmicrosoft.com...this may take a while...zzz..."
 $newTenantId = Add-Tenant -orgName $OrganizationName -tenantName $NewTenantName -token $token
 # re-authenticate in the b2c tenant
+=======
+# $token = Get-Token -resource "74658136-14ec-4630-ad9b-26e160ff0fc6" -ErrorAction Stop
+# if ($NULL -eq $token.AccessToken -or $token.AccessToken -eq "") {
+#     Write-Host "Token not available, try logging in with Connect-AzAccount"
+#     return;
+# }
+
+# Write-Host "Creating tenant $NewTenantName.onmicrosoft.com...this may take a while...zzz..."
+# $newTenantId = Add-Tenant -orgName $OrganizationName -tenantName $NewTenantName -token $token
+$newTenantId = "bf9c040f-12f0-46aa-86f4-0e2db9bf460d" #jpdauto10
+# # re-authenticate in the b2c tenant
+>>>>>>> 300f8b397081a336da0ffe5573c5a2ef5061c559
 $b2cToken = Get-Token -resource "https://management.core.windows.net/" -tenant $newTenantId
 $addAppResponse = Add-ApplicationRegistration -appName $AppName -appReplyUrl $AppReplyUrl -tenantName $newTenantId -token $b2cToken
 
