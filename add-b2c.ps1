@@ -5,19 +5,19 @@ Param (
     [Parameter(ValueFromPipelineByPropertyName)]
     [string] $OrganizationName,
     [string] $AppName = "test-auto-app",
-    [string] $AppReplyUrl = "http://localhost:3000",
+    [string] $AppReplyUrl = "http://localhost:3000/signin",
     [string] $FlowName = "susiv2",
 
     [Parameter(ParameterSetName = 'UiCustomization')]
-    [string] $ResourceGroupName,
+    [string] $ResourceGroupName = "service-me-p-jpdab2c",
     [Parameter(ParameterSetName = 'UiCustomization')]
     [string] $UiStoreName = $NewTenantName,
     [Parameter(ParameterSetName = 'UiCustomization')]
     [string] $UiStoreContainerName = "b2cui",
     [Parameter(ParameterSetName = 'UiCustomization')]
-    [string] $SubscriptionId,
+    [string] $SubscriptionId = "e7048bdb-835c-440f-9304-aa4171382839",
     [Parameter(ParameterSetName = 'UiCustomization')]
-    [string] $SubscriptionTenantId,
+    [string] $SubscriptionTenantId = "72f988bf-86f1-41af-91ab-2d7cd011db47",
     [Parameter(ParameterSetName = 'UiCustomization')]
     [string] $LocationOverride = "eastus",
     [switch] $UiCustomization = $FALSE
@@ -205,16 +205,23 @@ function Write-Details {
         [string]$replyUrl
     )
     Write-Host Your new tenant and app are created!
-    Write-Host Tenant: -NoNewline
+    Write-Host Tenant:  -NoNewline
     Write-Host -ForegroundColor Green $newTenantId
-    Write-Host App ID: -NoNewline
+    Write-Host App ID:  -NoNewline
     Write-Host -ForegroundColor Green $appId
-    Write-Host Susi flow: -NoNewline
+    Write-Host Susi flow:  -NoNewline
     Write-Host -ForegroundColor Green $flowId
-    Write-Host Dev reply url: -NoNewline
+    Write-Host Dev reply url:  -NoNewline
     Write-Host -ForegroundColor Green $replyUrl
     # todo: make sure this works on pscore
     $encodedUrl = [System.Web.HttpUtility]::UrlEncode($replyUrl)
+    Write-Host -NoNewLine OpenID discovery URL: "https://"
+    Write-Host -NoNewLine -ForegroundColor Green $NewTenantName
+    Write-Host -NoNewLine ".b2clogin.com/" 
+    Write-Host -NoNewline -ForegroundColor Green $newTenantId
+    Write-Host -NoNewline "/v2.0/.well-known/openid-configuration?p="
+    Write-Host -ForegroundColor Green $flowId
+
     Write-Host -NoNewline Signin URL: "https://" 
     Write-Host -NoNewLine -ForegroundColor Green $NewTenantName
     Write-Host -NoNewLine ".b2clogin.com/" 
@@ -255,29 +262,21 @@ function Get-Token {
 }
 
 # authenticates as ibiza :/
-<<<<<<< HEAD
+Write-Verbose "Acquiring token in home tenant to create new b2c directory"
 $token = Get-Token -resource "74658136-14ec-4630-ad9b-26e160ff0fc6" -ErrorAction Stop
 if ($NULL -eq $token.AccessToken -or $token.AccessToken -eq "") {
     Write-Host "Token not available, try logging in with Connect-AzAccount"
     return;
 }
 
-Write-Host "Creating tenant $NewTenantName.onmicrosoft.com...this may take a while...zzz..."
+Write-Host "Creating directory $NewTenantName.onmicrosoft.com...this will take about a minute...zzz..."
 $newTenantId = Add-Tenant -orgName $OrganizationName -tenantName $NewTenantName -token $token
-# re-authenticate in the b2c tenant
-=======
-# $token = Get-Token -resource "74658136-14ec-4630-ad9b-26e160ff0fc6" -ErrorAction Stop
-# if ($NULL -eq $token.AccessToken -or $token.AccessToken -eq "") {
-#     Write-Host "Token not available, try logging in with Connect-AzAccount"
-#     return;
-# }
+# $newTenantId = "bf9c040f-12f0-46aa-86f4-0e2db9bf460d" #jpdauto10
 
-# Write-Host "Creating tenant $NewTenantName.onmicrosoft.com...this may take a while...zzz..."
-# $newTenantId = Add-Tenant -orgName $OrganizationName -tenantName $NewTenantName -token $token
-$newTenantId = "bf9c040f-12f0-46aa-86f4-0e2db9bf460d" #jpdauto10
-# # re-authenticate in the b2c tenant
->>>>>>> 300f8b397081a336da0ffe5573c5a2ef5061c559
+# re-authenticate in the b2c tenant
+Write-Verbose "Fetching token in new b2c tenant $newTenantId"
 $b2cToken = Get-Token -resource "https://management.core.windows.net/" -tenant $newTenantId
+Write-Verbose "Adding new application registration"
 $addAppResponse = Add-ApplicationRegistration -appName $AppName -appReplyUrl $AppReplyUrl -tenantName $newTenantId -token $b2cToken
 
 # todo: add discovery of more pages, versions, etc for ui customization
@@ -285,12 +284,16 @@ $customUiPageRootUrl = "https://$UiStoreName.blob.core.windows.net/$UiStoreConta
 
 if ($PSCmdlet.ParameterSetName -eq "UiCustomization" -or $UiCustomization) {
     # todo: link tenant to subscription - requires azure sub & resource group 
+    Write-Verbose "Creating blob storage account for UI customizations"
     $uiStore = Add-AzureBlobStorageAccount -rgName $ResourceGroupName -storageName $UiStoreName -tenantUrl "$NewTenantName.b2clogin.com" -subId $SubscriptionId -subTenantId $SubscriptionTenantId
     $container = Add-UiStoreContainer -containerName $UiStoreContainerName -ctx $uiStore.Context
+    Write-Verbose "Generating UI customization data"
     Add-UiFilesToContainer -localRootPath $(Resolve-Path -Path ui) -containerName $container.Name -ctx $uiStore.Context
+    Write-Verbose "Adding user flows with UI customizations"
     $addFlowResponse = Add-StandardSusiUserFlow -tenantId $newTenantId -token $b2cToken -flowName $FlowName -customUiPageRootUrl $customUiPageRootUrl -tenantName $NewTenantName -uiCustomization
 }
 else {
+    Write-Verbose "Adding SUSIv2 flow"
     $addFlowResponse = Add-StandardSusiUserFlow -tenantId $newTenantId -token $b2cToken -flowName $FlowName -tenantName $NewTenantName
 }
 
