@@ -1,0 +1,172 @@
+@graphToken = {{$aadV2Token scopes:Application.ReadWrite.All,DelegatedPermissionGrant.ReadWrite.All tenantid:jpdab2c.onmicrosoft.com clientid:bb713eaf-5452-4098-b199-d68e2f736aed}}
+@b2cTenantName = jpdab2c
+@b2cApiName = sample-api
+@b2cScopeName = access_as_user
+@b2cScopeId = {{$guid}}
+
+# @name createApiApp
+POST https://graph.microsoft.com/v1.0/applications
+Content-Type: application/json
+Authorization: Bearer {{graphToken}}
+
+{
+    "displayName": "{{b2cApiName}}"
+}
+
+###
+@apiAppId = {{createApiApp.response.body.appId}}
+@apiObjectId = {{createApiApp.response.body.id}}
+
+### update the registration to add a scope
+
+PATCH https://graph.microsoft.com/v1.0/applications/{{apiObjectId}}
+Content-Type: application/json
+Authorization: Bearer {{graphToken}}
+
+{
+    "identifierUris": [
+		"https://{{b2cTenantName}}.onmicrosoft.com/{{b2cApiName}}"
+	],
+    "api":{
+        "oauth2PermissionScopes": [
+            {
+                "adminConsentDescription": "{{b2cScopeName}}",
+                "adminConsentDisplayName": "Access API as user",
+                "id": "{{b2cScopeId}}",
+                "isEnabled": true,
+                "type": "Admin",
+                "value": "access_as_user"
+            }
+        ]
+    }
+}
+
+### get the scope's ID, as this tool seems to recreate the GUID on each run
+### this is an array and advanced filtering is not yet available for b2c
+### (e.g., /api?$filteroauth2PermissionScopes/any(x:x/value eq 'access_as_user'))
+### presumably, since we just created this app, there should only be one scope
+### (the one we created) so we can take the first.
+### obviously better tools (e.g., ps or dotnet) could search the array
+
+# @name getScopeId
+GET https://graph.microsoft.com/v1.0/applications/{{apiObjectId}}/api/oauth2PermissionScopes
+Authorization: Bearer {{graphToken}}
+
+###
+
+# @name getGraphServicePrincipalId
+GET https://graph.microsoft.com/v1.0/servicePrincipals?$filter=appId eq '00000003-0000-0000-c000-000000000000'&$select=id
+Authorization: Bearer {{graphToken}}
+
+###
+
+@graphSpId = {{getGraphServicePrincipalId.response.body.value[0].id}}
+
+@scopeId = {{getScopeId.response.body.value[?(@.value == 'access_as_user')].id}}
+
+### create the client app, and add the previously created scope as an API permission
+
+# @name createApiClientApp
+POST https://graph.microsoft.com/v1.0/applications
+Content-Type: application/json
+Authorization: Bearer {{graphToken}}
+
+{
+    "displayName": "sample-api-client",
+    "spa": {
+        "redirectUris": [
+            "http://localhost:3000/"
+        ]
+    },
+    "requiredResourceAccess": [
+		{
+			"resourceAppId": "{{apiAppId}}",
+			"resourceAccess": [
+				{
+					"id": "{{scopeId}}",
+					"type": "Scope"
+				}
+			]
+		},
+		{
+			"resourceAppId": "00000003-0000-0000-c000-000000000000",
+			"resourceAccess": [
+				{
+					"id": "37f7f235-527c-4136-accd-4a02d197296e",
+					"type": "Scope"
+				},
+				{
+					"id": "7427e0e9-2fba-42fe-b0c0-848c9e6a8182",
+					"type": "Scope"
+				}
+			]
+		}
+	]
+}
+
+###
+
+# @name createServicePrincipalForApi
+POST https://graph.microsoft.com/v1.0/servicePrincipals
+Content-Type: application/json
+Authorization: Bearer {{graphToken}}
+
+{
+   "appId": "{{apiAppId}}"
+}
+
+###
+
+# @name createServicePrincipalForClient
+POST https://graph.microsoft.com/v1.0/servicePrincipals
+Content-Type: application/json
+Authorization: Bearer {{graphToken}}
+
+{
+   "appId": "{{apiClientAppId}}"
+}
+
+###
+
+@apiAppSpId = {{createServicePrincipalForApi.response.body.id}}
+@apiClientAppSpId = {{createServicePrincipalForClient.response.body.id}}
+@apiClientAppId = {{createApiClientApp.response.body.appId}}
+@apiClientObjectId = {{createApiClientApp.response.body.id}}
+
+### admin consent to the scopes - graph & our API's scope - this is required for b2c
+
+POST https://graph.microsoft.com/v1.0/oauth2PermissionGrants
+Content-Type: application/json
+Authorization: Bearer {{graphToken}}
+
+{
+    "clientId": "{{apiClientAppSpId}}",
+    "consentType": "AllPrincipals",
+    "principalId": null,
+    "resourceId": "{{graphSpId}}",
+    "scope": " openid offline_access"
+}
+
+###
+
+POST https://graph.microsoft.com/v1.0/oauth2PermissionGrants
+Content-Type: application/json
+Authorization: Bearer {{graphToken}}
+
+{
+    "clientId": "{{apiClientAppSpId}}",
+    "consentType": "AllPrincipals",
+    "principalId": null,
+    "resourceId": "{{apiAppSpId}}",
+    "scope": "access_as_user"
+}
+
+###
+
+DELETE https://graph.microsoft.com/v1.0/applications/{{apiClientObjectId}}
+Authorization: Bearer {{graphToken}}
+
+###
+
+DELETE https://graph.microsoft.com/v1.0/applications/{{apiObjectId}}
+Authorization: Bearer {{graphToken}}

@@ -23,6 +23,7 @@ Param (
     [switch] $UiCustomization = $FALSE
 )
 
+# as there is no API for b2c tenant creation, this uses the portal API - not ideal
 function Add-Tenant {
     param (
         [string]$orgName,
@@ -37,6 +38,17 @@ function Add-Tenant {
 
     $payload = "{companyName: `"$orgName`", countryCode: `"$country`", initialDomainPrefix: `"$tenantName`"}";
     return Invoke-AuthenticatedPost -endpoint "https://main.iam.ad.ext.azure.com/api/Directories/B2C" -payload $payload -token $token
+}
+
+# move these to graph
+
+function Add-AppRegistration {
+    param (
+        [string]$appName,
+        [string]$tenantName,
+        [string]$appReplyUrl,
+        $token
+    )
 }
 
 function Add-ApplicationRegistration {
@@ -177,7 +189,7 @@ function Add-AzureResourceLinkToB2C {
     # todo: this
 }
 
-function Invoke-AuthenticatedPost {
+function Invoke-IbizaAuthenticatedPost {
     param (
         [string]$endpoint,
         [string]$payload,
